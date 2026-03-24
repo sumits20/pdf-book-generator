@@ -97,8 +97,8 @@ with st.sidebar:
             "stabilityai/stable-diffusion-xl-base-1.0"
         )
         image_steps = st.slider("Image Steps", min_value=20, max_value=60, value=30)
-        image_width = 1024
-        image_height = 1408
+        image_width = 768
+        image_height = 1024
 
     elif image_provider == "OpenAI":
         openai_image_model = st.selectbox(
