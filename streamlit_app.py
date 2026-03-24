@@ -46,7 +46,6 @@ with st.sidebar:
     master_prompt = st.text_area(
         "Master Character/Theme", 
         "A cute baby elephant with big ears",
-        help="This description will be added to every page for consistency."
     )
 
 # 4. The Generation Engine
