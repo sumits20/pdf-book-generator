@@ -22,21 +22,22 @@ if "page_prompts" not in st.session_state:
 # =========================================================
 
 STYLE_SUFFIX = (
-    "cute toddler coloring book page, ages 3 to 6, "
-    "simple cartoon style, one subject only, centered on page, "
-    "full body visible, big friendly eyes, "
-    "thick bold clean black outlines, uniform line thickness, "
-    "minimal interior detail, minimal fur or feather texture, "
-    "large easy coloring spaces, plain white background, "
-    "black and white line art only",
-    "Add border, no bleeding outside border"
+    "cute coloring book page, ages 5 to 10, "
+    "simple cartoon style, "
+    "full body visible, centered, "
+    "subject small relative to page, "
+    "leave wide empty white space around the subject, "
+    "keep all parts of the drawing far from all edges, "
+    "do not crop any part of the subject, "
+    "plain white background, "
+    "black and white line art only, "
+    "bold clean black outlines, "
+    "minimal details, large easy coloring spaces"
 )
 
 NEGATIVE_PROMPT = (
-    "color, coloured, grayscale, grey fill, gray fill, shading, gradients, shadows, lighting, "
-    "dark background, black background, realistic, semi-realistic, "
-    "detailed fur, detailed feathers, texture, sketch, messy lines, thin lines, blur, noise, "
-    "cross-hatching, hatching, text, watermark, multiple characters, crowd, extra animals, toys"
+    "cropped, cut off, close-up, zoomed in, partial body, out of frame, "
+    "touching edge, touching border, background, "color, shading, gradients, realistic, detailed texture"
 )
 
 # =========================================================
@@ -102,16 +103,9 @@ with st.sidebar:
             "OpenAI Image Model",
             ["gpt-image-1-mini", "gpt-image-1"]
         )
-        openai_image_size = st.selectbox(
-            "OpenAI Image Size",
-            ["1024x1024", "1024x1536", "1536x1024"],
-            index=1
+        openai_image_size = "1024x1536"
         )
-        openai_image_quality = st.selectbox(
-            "OpenAI Image Quality",
-            ["low", "medium", "high"],
-            index=1
-        )
+        openai_image_quality = "low"
 
     elif image_provider == "Grok":
         grok_image_model = st.text_input(
