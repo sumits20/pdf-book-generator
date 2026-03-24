@@ -5,8 +5,8 @@ import requests
 from io import BytesIO
 from PIL import Image
 
-st.title("🎨 AI KDP Book Creator")
-st.subheader("Generate ready-to-upload PDFs for Amazon")
+st.title("🎨 AI Children's Book Creator")
+st.subheader("Generate Childrens book - powered by AI")
 
 # Sidebar for API Key & Settings
 with st.sidebar:
@@ -51,7 +51,7 @@ if st.button(f"Generate {page_count} Page Book"):
 
     # 3. Final Export
     pdf_output = pdf.output() # Returns bytes in fpdf2
-    st.success("✅ Book Generated!")
+    st.success("Book Generated!")
     st.download_button(
         label="Download KDP PDF",
         data=pdf_output,
