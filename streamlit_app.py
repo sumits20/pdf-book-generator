@@ -140,32 +140,49 @@ def extract_json_array(text: str):
 
 
 def build_page_prompt_list(theme: str, count: int) -> list[str]:
-    if not openai_client:
-        raise ValueError("OPENAI_API_KEY is missing. OpenAI is required for prompt generation.")
+    """
+    Uses OpenAI GPT-4o mini to generate a clean list of page prompts
+    that actually reflect the user's theme.
+    """
 
     instructions = (
-        "You create short prompt items for a toddler-friendly children's coloring book. "
+        "You create short prompt items for a children's coloring book. "
         "Return ONLY a valid JSON array of strings. "
-        "Each item must describe exactly one cute cartoon subject suitable for a simple coloring page. "
-        "Avoid realistic wording, backgrounds, scenery, and multiple subjects."
+        "Each item must clearly reflect the user's theme. "
+        "If the theme includes an activity, object, or scenario, keep that idea in every prompt. "
+        "Do not drift into unrelated generic baby-animal prompts. "
+        "Each prompt must describe exactly one main scene suitable for one coloring page."
     )
 
     user_input = f"""
 Theme: {theme}
 Number of pages: {count}
 
-Create exactly {count} short coloring-book prompts.
+Create exactly {count} coloring-book page prompts.
 
 Rules:
-- Make every subject cute, cartoon-like, and toddler-friendly.
-- Prefer big eyes, round face, smiling expression, simple pose.
-- Keep prompts short.
-- Avoid realistic wording.
-- Good examples:
-  "cute baby elephant cartoon, big eyes, sitting"
-  "cute baby bunny cartoon, smiling, front view"
-  "cute toy car with eyes, smiling, front view"
-- Return ONLY JSON array.
+- Every prompt must clearly match the theme: "{theme}"
+- If the theme contains an action or activity, keep that action in the prompt
+- Keep prompts simple, cute, and child-friendly
+- One main scene per page
+- Avoid crowded backgrounds and too many objects
+- Avoid realism
+- Keep wording short and usable for image generation
+- Return ONLY JSON array
+
+Examples:
+If theme is "Baby Animals", good prompts are:
+["cute baby elephant cartoon, sitting", "cute baby tiger cartoon, smiling"]
+
+If theme is "Animals Playing Football", good prompts are:
+["cute lion cartoon playing football",
+ "cute giraffe cartoon kicking a football",
+ "cute panda cartoon running with a football",
+ "cute elephant cartoon scoring a football goal"]
+
+Bad prompts for that theme are:
+["baby lion sitting", "baby panda hugging bamboo"]
+because they do not reflect the football theme.
 """
 
     response = openai_client.responses.create(
@@ -188,7 +205,9 @@ Rules:
                 cleaned.append(item)
 
     if len(cleaned) != count:
-        raise ValueError(f"Expected {count} prompts, but got {len(cleaned)}.\nParsed prompts: {cleaned}")
+        raise ValueError(
+            f"Expected {count} prompts, but got {len(cleaned)}.\nParsed prompts: {cleaned}"
+        )
 
     return cleaned
 
