@@ -96,8 +96,8 @@ with st.sidebar:
             "stabilityai/stable-diffusion-xl-base-1.0"
         )
         image_steps = st.slider("Image Steps", min_value=20, max_value=60, value=30)
-        image_width = st.number_input("Image Width", min_value=512, max_value=1024, value=800, step=64)
-        image_height = st.number_input("Image Height", min_value=512, max_value=1408, value=1024, step=64)
+        image_width = 1024
+        image_height = 1408
 
     elif image_provider == "OpenAI":
         openai_image_model = st.selectbox(
@@ -105,7 +105,6 @@ with st.sidebar:
             ["gpt-image-1-mini", "gpt-image-1"]
         )
         openai_image_size = "1024x1536"
-        )
         openai_image_quality = "low"
 
     elif image_provider == "Grok":
