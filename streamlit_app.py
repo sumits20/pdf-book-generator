@@ -5,30 +5,32 @@ import requests
 from io import BytesIO
 import gc
 
-# Hard-coded style suffix
 STYLE_SUFFIX = (
-    ", professional coloring book page, heavy bold black outlines, "
-    "pure white background, clean digital line art, high contrast, "
-    "thick strokes, vector style, large coloring areas, "
-    "no background patterns, simple flat design"
+    "children's coloring book illustration, clean vector line art, "
+    "centered composition, single subject, "
+    "bold thick black outlines, uniform line thickness, crisp edges, "
+    "pure white background, no background elements, "
+    "large open spaces, minimal details, simple shapes, "
+    "cute and child-friendly style, "
+    "high contrast black and white, "
+    "square border frame"
 )
 
-# Hard-coded negative prompt
 NEGATIVE_PROMPT = (
-    "shading, gradients, shadows, 3D, depth, realistic, photo, "
-    "grey, blurry, messy lines, thin lines, complex textures, "
-    "dithering, cross-hatching, colors, person, human"
+    "color, grayscale, shading, gradients, shadows, lighting, "
+    "3D, realistic, textures, background, scenery, clutter, "
+    "thin lines, sketch, messy lines, blur, noise, "
+    "cross-hatching, hatching, complex details"
 )
 
 
 # 1. Setup Page Config
 st.set_page_config(page_title="Together AI KDP Generator", page_icon="📚")
 
-st.title("📚 Together AI KDP Book Maker")
+st.title("AI Powered KDP Book Maker")
 st.markdown("Automate your coloring books for pennies per page.")
 
-# 2. Initialize Together Client using your Secret
-# Ensure TOGETHER_API_KEY is in your Streamlit Secrets
+# 2. Initialize Together Client using Secret
 try:
     client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
 except Exception as e:
@@ -49,7 +51,7 @@ with st.sidebar:
     )
 
 # 4. The Generation Engine
-if st.button(f"🚀 Generate {page_count}-Page PDF"):
+if st.button(f"Generate {page_count}-Page PDF"):
     # Standard KDP 8.5x11 inches
     pdf = FPDF(unit="in", format=(8.5, 11))
     
@@ -57,11 +59,11 @@ if st.button(f"🚀 Generate {page_count}-Page PDF"):
     status_text = st.empty()
     
     # KDP-Specific Quality Prompt Wrapper
-    quality_wrapper = "coloring book page, clean black and white line art, bold outlines, white background, no shading, no grey, high contrast, 300 dpi style"
+    quality_wrapper = "300 dpi style"
 
     for i in range(page_count):
         current_page = i + 1
-        status_text.text(f"🎨 Generating Page {current_page} of {page_count}...")
+        status_text.text(f"Generating Page {current_page} of {page_count}...")
         
         try:
             # Together AI API Call (SDXL 1.0 is the best 'cheap' model for lines)
@@ -71,7 +73,7 @@ if st.button(f"🚀 Generate {page_count}-Page PDF"):
                 negative_prompt=NEGATIVE_PROMPT, # This removes the grey shading
                 model="stabilityai/stable-diffusion-xl-base-1.0",
                 width=1024,
-                height=1024,
+                height=1448,
                 steps=50, # Increased steps slightly for cleaner, smoother lines
                 n=1
             )
