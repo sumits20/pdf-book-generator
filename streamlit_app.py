@@ -26,6 +26,7 @@ STYLE_SUFFIX = (
     "simple cartoon style, "
     "full body visible, centered, "
     "subject small relative to page, "
+    "subject should occupy only about 50 to 60 percent of the page height, "
     "leave wide empty white space around the subject, "
     "keep all parts of the drawing far from all edges, "
     "do not crop any part of the subject, "
