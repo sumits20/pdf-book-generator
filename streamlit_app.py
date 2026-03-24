@@ -37,7 +37,8 @@ STYLE_SUFFIX = (
 
 NEGATIVE_PROMPT = (
     "cropped, cut off, close-up, zoomed in, partial body, out of frame, "
-    "touching edge, touching border, background, "color, shading, gradients, realistic, detailed texture"
+    "touching edge, touching border, background, "color, "
+    "shading, gradients, realistic, detailed texture"
 )
 
 # =========================================================
