@@ -24,18 +24,17 @@ if "page_prompts" not in st.session_state:
 STYLE_SUFFIX = (
     "cute toddler coloring book page, ages 3 to 6, "
     "simple cartoon style, one subject only, centered on page, "
-    "full body visible, simple pose, big friendly eyes, "
-    "very thick bold clean black outlines, uniform line thickness, "
+    "full body visible, big friendly eyes, "
+    "thick bold clean black outlines, uniform line thickness, "
     "minimal interior detail, minimal fur or feather texture, "
     "large easy coloring spaces, plain white background, "
-    "no scenery, no background objects, no extra characters, "
-    "black and white line art only"
+    "black and white line art only",
+    "Add border, no bleeding outside border"
 )
 
 NEGATIVE_PROMPT = (
     "color, coloured, grayscale, grey fill, gray fill, shading, gradients, shadows, lighting, "
-    "dark background, black background, scenery, landscape, sky, clouds, mountains, trees, grass, "
-    "flowers, leaves, branch, rocks, water, pond, realistic, semi-realistic, "
+    "dark background, black background, realistic, semi-realistic, "
     "detailed fur, detailed feathers, texture, sketch, messy lines, thin lines, blur, noise, "
     "cross-hatching, hatching, text, watermark, multiple characters, crowd, extra animals, toys"
 )
@@ -164,13 +163,10 @@ Number of pages: {count}
 Create exactly {count} short coloring-book prompts.
 
 Rules:
-- Each prompt must describe exactly one subject only.
 - Make every subject cute, cartoon-like, and toddler-friendly.
 - Prefer big eyes, round face, smiling expression, simple pose.
 - Keep prompts short.
 - Avoid realistic wording.
-- Avoid scenery, plants, rocks, water, branches, flowers, and backgrounds.
-- Avoid complex action poses.
 - Good examples:
   "cute baby elephant cartoon, big eyes, sitting"
   "cute baby bunny cartoon, smiling, front view"
