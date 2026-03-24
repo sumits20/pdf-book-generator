@@ -94,15 +94,15 @@ if st.button(f"🚀 Generate {page_count}-Page PDF"):
             
         progress_bar.progress(current_page / page_count)
 
-    # 5. Finalize and Download
+    # 5. Finalise and Download
     status_text.text("✅ Book Assembly Complete!")
     
-    # Convert PDF to bytes for the download button
-    pdf_bytes = pdf.output() 
+    # FIX: Wrap the output in bytes() to make it compatible with Streamlit
+    pdf_bytes = bytes(pdf.output()) 
     
     st.download_button(
         label="📥 Download KDP-Ready PDF",
-        data=pdf_bytes,
+        data=pdf_bytes,  # Now this is a standard bytes object
         file_name=f"{book_title.replace(' ', '_')}.pdf",
         mime="application/pdf"
     )
