@@ -5,6 +5,22 @@ import requests
 from io import BytesIO
 import gc
 
+# Hard-coded style suffix
+STYLE_SUFFIX = (
+    ", professional coloring book page, heavy bold black outlines, "
+    "pure white background, clean digital line art, high contrast, "
+    "thick strokes, vector style, large coloring areas, "
+    "no background patterns, simple flat design"
+)
+
+# Hard-coded negative prompt
+NEGATIVE_PROMPT = (
+    "shading, gradients, shadows, 3D, depth, realistic, photo, "
+    "grey, blurry, messy lines, thin lines, complex textures, "
+    "dithering, cross-hatching, colors, person, human"
+)
+
+
 # 1. Setup Page Config
 st.set_page_config(page_title="Together AI KDP Generator", page_icon="📚")
 
@@ -51,14 +67,15 @@ if st.button(f"🚀 Generate {page_count}-Page PDF"):
         try:
             # Together AI API Call (SDXL 1.0 is the best 'cheap' model for lines)
             response = client.images.generate(
-                prompt=f"{master_prompt}, {quality_wrapper}",
+                # Combine user prompt with the bold style suffix
+                prompt=f"{master_prompt}, {quality_wrapper}, {STYLE_SUFFIX}",
+                negative_prompt=NEGATIVE_PROMPT, # This removes the grey shading
                 model="stabilityai/stable-diffusion-xl-base-1.0",
                 width=1024,
                 height=1024,
-                steps=40,
+                steps=50, # Increased steps slightly for cleaner, smoother lines
                 n=1
             )
-            
             img_url = response.data[0].url
             img_data = requests.get(img_url).content
             
