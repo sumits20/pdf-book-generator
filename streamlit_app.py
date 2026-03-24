@@ -9,6 +9,16 @@ import json
 import re
 
 # =========================================================
+# Session State
+# =========================================================
+
+if "page_prompts" not in st.session_state:
+    st.session_state.page_prompts = []
+
+if "prompt_generation_done" not in st.session_state:
+    st.session_state.prompt_generation_done = False
+
+# =========================================================
 # Prompt / Style Settings
 # =========================================================
 
@@ -36,7 +46,7 @@ NEGATIVE_PROMPT = (
 
 st.set_page_config(page_title="Together AI KDP Generator", page_icon="📚")
 st.title("AI Powered KDP Book Maker")
-st.markdown("Generate coloring-book prompts with OpenAI, then create pages with Together AI.")
+st.markdown("Generate coloring-book prompts with OpenAI, review them, then create pages with Together AI.")
 
 # =========================================================
 # API Clients
@@ -82,7 +92,7 @@ with st.sidebar:
     image_height = st.number_input("Image Height", min_value=512, max_value=1408, value=1024, step=64)
 
 # =========================================================
-# Helper: Create prompt list using OpenAI
+# Helpers
 # =========================================================
 
 def extract_json_array(text: str):
@@ -91,7 +101,6 @@ def extract_json_array(text: str):
     """
     text = text.strip()
 
-    # Direct JSON array
     try:
         data = json.loads(text)
         if isinstance(data, list):
@@ -99,7 +108,6 @@ def extract_json_array(text: str):
     except Exception:
         pass
 
-    # If wrapped in markdown/code block
     match = re.search(r"\[[\s\S]*\]", text)
     if match:
         try:
@@ -154,7 +162,6 @@ Rules:
     if not prompt_list:
         raise ValueError(f"Could not parse prompt list from OpenAI response:\n{raw_text}")
 
-    # Clean and normalize
     cleaned = []
     for item in prompt_list:
         if isinstance(item, str):
@@ -170,75 +177,133 @@ Rules:
     return cleaned
 
 
+def reset_prompt_inputs(count: int):
+    """
+    Remove old text_input keys if page count/theme changes and user regenerates prompts.
+    """
+    for i in range(100):
+        key = f"prompt_{i}"
+        if key in st.session_state:
+            del st.session_state[key]
+
+
 # =========================================================
-# Main Action
+# Step 1: Generate Prompt List
 # =========================================================
 
-if st.button(f"Generate {page_count}-Page PDF"):
-    try:
-        with st.spinner("Creating page prompt list with OpenAI..."):
-            page_prompts = build_page_prompt_list(master_prompt, int(page_count))
+col1, col2 = st.columns(2)
 
-        st.success("Prompt list created successfully.")
-        st.subheader("Generated Page Prompts")
-        st.write(page_prompts)
-
-    except Exception as e:
-        st.error(f"Failed to generate prompt list with OpenAI: {e}")
-        st.stop()
-
-    # Standard KDP 8.5 x 11 inches
-    pdf = FPDF(unit="in", format=(8.5, 11))
-
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-
-    quality_wrapper = "300 dpi style"
-
-    for i, page_subject in enumerate(page_prompts):
-        current_page = i + 1
-        status_text.text(f"Generating Page {current_page} of {page_count}: {page_subject}")
-
+with col1:
+    if st.button("Generate Prompt List", use_container_width=True):
         try:
-            final_prompt = (
-                f"{page_subject}, {quality_wrapper}, {STYLE_SUFFIX}"
-            )
+            reset_prompt_inputs(int(page_count))
 
-            response = together_client.images.generate(
-                prompt=final_prompt,
-                negative_prompt=NEGATIVE_PROMPT,
-                model=together_model,
-                width=int(image_width),
-                height=int(image_height),
-                steps=int(image_steps),
-                n=1
-            )
+            with st.spinner("Creating page prompt list with OpenAI..."):
+                prompts = build_page_prompt_list(master_prompt, int(page_count))
 
-            img_url = response.data[0].url
-            img_data = requests.get(img_url, timeout=60).content
-
-            pdf.add_page()
-            pdf.image(BytesIO(img_data), x=0.5, y=0.5, w=7.5)
-
-            del img_data
-            gc.collect()
+            st.session_state.page_prompts = prompts
+            st.session_state.prompt_generation_done = True
+            st.success("Prompt list created successfully.")
 
         except Exception as e:
-            st.error(f"Error on page {current_page} ({page_subject}): {e}")
-            break
+            st.error(f"Failed to generate prompt list with OpenAI: {e}")
+            st.session_state.prompt_generation_done = False
 
-        progress_bar.progress(current_page / page_count)
+with col2:
+    if st.button("Clear Prompts", use_container_width=True):
+        reset_prompt_inputs(int(page_count))
+        st.session_state.page_prompts = []
+        st.session_state.prompt_generation_done = False
+        st.success("Prompt list cleared.")
 
-    status_text.text("Book assembly complete.")
+# =========================================================
+# Step 2: Review / Edit Prompts
+# =========================================================
 
-    try:
-        pdf_bytes = bytes(pdf.output())
+if st.session_state.page_prompts:
+    st.subheader("Review / Edit Page Prompts")
+    st.caption("You can edit any prompt before image generation starts.")
 
-        st.download_button(
-            label="Download KDP-Ready PDF",
-            data=pdf_bytes,
-            file_name=f"{book_title.replace(' ', '_')}.pdf",
-            mime="application/pdf"
+    edited_prompts = []
+
+    for i, prompt in enumerate(st.session_state.page_prompts):
+        edited_value = st.text_input(
+            f"Page {i + 1}",
+            value=prompt,
+            key=f"prompt_{i}"
         )
-    except Exception as e:
-        st.error(f"Could not build PDF: {e}")
+        edited_prompts.append(edited_value.strip())
+
+    st.session_state.page_prompts = edited_prompts
+
+    bad_prompts = [
+        p for p in edited_prompts
+        if not p or "background" in p.lower() or "multiple" in p.lower()
+    ]
+
+    if bad_prompts:
+        st.warning("Some prompts may need review. Empty prompts or prompts mentioning background/multiple may give poor coloring-book results.")
+
+# =========================================================
+# Step 3: Generate Images and Build PDF
+# =========================================================
+
+if st.session_state.page_prompts:
+    if st.button("Generate Images & PDF", type="primary", use_container_width=True):
+        final_prompts = [p.strip() for p in st.session_state.page_prompts if p.strip()]
+
+        if len(final_prompts) != int(page_count):
+            st.error(f"You need exactly {int(page_count)} non-empty prompts before generating images.")
+            st.stop()
+
+        pdf = FPDF(unit="in", format=(8.5, 11))
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        quality_wrapper = "300 dpi style"
+
+        for i, page_subject in enumerate(final_prompts):
+            current_page = i + 1
+            status_text.text(f"Generating Page {current_page} of {page_count}: {page_subject}")
+
+            try:
+                final_prompt = f"{page_subject}, {quality_wrapper}, {STYLE_SUFFIX}"
+
+                response = together_client.images.generate(
+                    prompt=final_prompt,
+                    negative_prompt=NEGATIVE_PROMPT,
+                    model=together_model,
+                    width=int(image_width),
+                    height=int(image_height),
+                    steps=int(image_steps),
+                    n=1
+                )
+
+                img_url = response.data[0].url
+                img_data = requests.get(img_url, timeout=60).content
+
+                pdf.add_page()
+                pdf.image(BytesIO(img_data), x=0.5, y=0.5, w=7.5)
+
+                del img_data
+                gc.collect()
+
+            except Exception as e:
+                st.error(f"Error on page {current_page} ({page_subject}): {e}")
+                break
+
+            progress_bar.progress(current_page / len(final_prompts))
+
+        status_text.text("Book assembly complete.")
+
+        try:
+            pdf_bytes = bytes(pdf.output())
+
+            st.download_button(
+                label="Download KDP-Ready PDF",
+                data=pdf_bytes,
+                file_name=f"{book_title.replace(' ', '_')}.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"Could not build PDF: {e}")
