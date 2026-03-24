@@ -1,6 +1,6 @@
 streamlit
 openai
 together
+xai-sdk
 fpdf2
-Pillow
 requests
