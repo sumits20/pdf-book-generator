@@ -72,8 +72,8 @@ if st.button(f"Generate {page_count}-Page PDF"):
                 prompt=f"{master_prompt}, {quality_wrapper}, {STYLE_SUFFIX}",
                 negative_prompt=NEGATIVE_PROMPT, # This removes the grey shading
                 model="stabilityai/stable-diffusion-xl-base-1.0",
-                width=1024,
-                height=1448,
+                width=800,
+                height=1024,
                 steps=50, # Increased steps slightly for cleaner, smoother lines
                 n=1
             )
