@@ -1,12 +1,14 @@
 import streamlit as st
 from together import Together
 from openai import OpenAI
+from xai_sdk import Client as XAIClient
 from fpdf import FPDF
 import requests
 from io import BytesIO
 import gc
 import json
 import re
+import base64
 
 # =========================================================
 # Session State
@@ -15,54 +17,55 @@ import re
 if "page_prompts" not in st.session_state:
     st.session_state.page_prompts = []
 
-if "prompt_generation_done" not in st.session_state:
-    st.session_state.prompt_generation_done = False
-
 # =========================================================
 # Prompt / Style Settings
 # =========================================================
 
 STYLE_SUFFIX = (
-    "black and white kids coloring book page, "
-    "one subject only, centered on page, "
-    "full body visible, simple pose, "
-    "thick bold clean black outlines, uniform line thickness, "
-    "minimal interior detail, large open coloring spaces, "
-    "plain white background, no scenery, no background objects, "
-    "no extra characters, rectangular border frame"
+    "cute toddler coloring book page, ages 3 to 6, "
+    "simple cartoon style, one subject only, centered on page, "
+    "full body visible, simple pose, big friendly eyes, "
+    "very thick bold clean black outlines, uniform line thickness, "
+    "minimal interior detail, minimal fur or feather texture, "
+    "large easy coloring spaces, plain white background, "
+    "no scenery, no background objects, no extra characters, "
+    "black and white line art only"
 )
 
 NEGATIVE_PROMPT = (
     "color, coloured, grayscale, grey fill, gray fill, shading, gradients, shadows, lighting, "
     "dark background, black background, scenery, landscape, sky, clouds, mountains, trees, grass, "
-    "multiple characters, crowd, extra animals, toys, party items, balloons, cake, decorations, "
-    "3D, realistic, textures, sketch, messy lines, thin lines, blur, noise, "
-    "cross-hatching, hatching, text, watermark"
+    "flowers, leaves, branch, rocks, water, pond, realistic, semi-realistic, "
+    "detailed fur, detailed feathers, texture, sketch, messy lines, thin lines, blur, noise, "
+    "cross-hatching, hatching, text, watermark, multiple characters, crowd, extra animals, toys"
 )
 
 # =========================================================
 # Streamlit Page
 # =========================================================
 
-st.set_page_config(page_title="Together AI KDP Generator", page_icon="📚")
+st.set_page_config(page_title="Multi-Provider KDP Generator", page_icon="📚")
 st.title("AI Powered KDP Book Maker")
-st.markdown("Generate coloring-book prompts with OpenAI, review them, then create pages with Together AI.")
+st.markdown("Generate prompts with OpenAI, review them, then create images using OpenAI, Together AI, or Grok.")
 
 # =========================================================
 # API Clients
 # =========================================================
 
 try:
-    together_client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
-except Exception:
-    st.error("Missing TOGETHER_API_KEY in Streamlit Secrets.")
-    st.stop()
-
-try:
     openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 except Exception:
-    st.error("Missing OPENAI_API_KEY in Streamlit Secrets.")
-    st.stop()
+    openai_client = None
+
+try:
+    together_client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
+except Exception:
+    together_client = None
+
+try:
+    xai_client = XAIClient(api_key=st.secrets["XAI_API_KEY"])
+except Exception:
+    xai_client = None
 
 # =========================================================
 # Sidebar
@@ -71,34 +74,57 @@ except Exception:
 with st.sidebar:
     st.header("Book Settings")
 
-    book_title = st.text_input("Book Filename", "my_together_book")
+    book_title = st.text_input("Book Filename", "my_coloring_book")
     page_count = st.number_input("Number of Pages", min_value=1, max_value=100, value=10)
 
     st.divider()
     st.subheader("Theme Input")
-    master_prompt = st.text_area(
-        "Book Theme",
-        "Baby Animals"
-    )
+    master_prompt = st.text_area("Book Theme", "Baby Animals")
 
     st.divider()
-    st.subheader("Model Settings")
-    together_model = st.text_input(
-        "Together Model",
-        "stabilityai/stable-diffusion-xl-base-1.0"
+    st.subheader("Image Provider")
+
+    image_provider = st.selectbox(
+        "Choose image provider",
+        ["Together AI", "OpenAI", "Grok"]
     )
-    image_steps = st.slider("Image Steps", min_value=20, max_value=60, value=30)
-    image_width = st.number_input("Image Width", min_value=512, max_value=1024, value=800, step=64)
-    image_height = st.number_input("Image Height", min_value=512, max_value=1408, value=1024, step=64)
+
+    if image_provider == "Together AI":
+        together_model = st.text_input(
+            "Together Model",
+            "stabilityai/stable-diffusion-xl-base-1.0"
+        )
+        image_steps = st.slider("Image Steps", min_value=20, max_value=60, value=30)
+        image_width = st.number_input("Image Width", min_value=512, max_value=1024, value=800, step=64)
+        image_height = st.number_input("Image Height", min_value=512, max_value=1408, value=1024, step=64)
+
+    elif image_provider == "OpenAI":
+        openai_image_model = st.selectbox(
+            "OpenAI Image Model",
+            ["gpt-image-1-mini", "gpt-image-1"]
+        )
+        openai_image_size = st.selectbox(
+            "OpenAI Image Size",
+            ["1024x1024", "1024x1536", "1536x1024"],
+            index=1
+        )
+        openai_image_quality = st.selectbox(
+            "OpenAI Image Quality",
+            ["low", "medium", "high"],
+            index=1
+        )
+
+    elif image_provider == "Grok":
+        grok_image_model = st.text_input(
+            "Grok Image Model",
+            "grok-imagine-image"
+        )
 
 # =========================================================
 # Helpers
 # =========================================================
 
 def extract_json_array(text: str):
-    """
-    Try to parse a JSON array from model output.
-    """
     text = text.strip()
 
     try:
@@ -121,32 +147,34 @@ def extract_json_array(text: str):
 
 
 def build_page_prompt_list(theme: str, count: int) -> list[str]:
-    """
-    Uses OpenAI GPT-4o mini to generate a clean list of page prompts.
-    """
+    if not openai_client:
+        raise ValueError("OPENAI_API_KEY is missing. OpenAI is required for prompt generation.")
 
     instructions = (
-        "You create short prompt items for a children's coloring book. "
+        "You create short prompt items for a toddler-friendly children's coloring book. "
         "Return ONLY a valid JSON array of strings. "
-        "Each item must be short, concrete, and suitable for a single coloring page. "
-        "Do not include numbering. Do not include explanations. "
-        "Keep each prompt focused on one subject only."
+        "Each item must describe exactly one cute cartoon subject suitable for a simple coloring page. "
+        "Avoid realistic wording, backgrounds, scenery, and multiple subjects."
     )
 
     user_input = f"""
 Theme: {theme}
 Number of pages: {count}
 
-Create exactly {count} short coloring-book page prompts.
+Create exactly {count} short coloring-book prompts.
 
 Rules:
-- Each prompt should describe one single subject only.
-- Keep prompts simple and child-friendly.
+- Each prompt must describe exactly one subject only.
+- Make every subject cute, cartoon-like, and toddler-friendly.
+- Prefer big eyes, round face, smiling expression, simple pose.
+- Keep prompts short.
+- Avoid realistic wording.
+- Avoid scenery, plants, rocks, water, branches, flowers, and backgrounds.
+- Avoid complex action poses.
 - Good examples:
-  "baby elephant"
-  "baby tiger sitting"
-  "baby bunny holding one carrot"
-- Avoid backgrounds, scenery, multiple subjects, story scenes, and complex compositions.
+  "cute baby elephant cartoon, big eyes, sitting"
+  "cute baby bunny cartoon, smiling, front view"
+  "cute toy car with eyes, smiling, front view"
 - Return ONLY JSON array.
 """
 
@@ -170,21 +198,61 @@ Rules:
                 cleaned.append(item)
 
     if len(cleaned) != count:
-        raise ValueError(
-            f"Expected {count} prompts, but got {len(cleaned)}.\nParsed prompts: {cleaned}"
-        )
+        raise ValueError(f"Expected {count} prompts, but got {len(cleaned)}.\nParsed prompts: {cleaned}")
 
     return cleaned
 
 
-def reset_prompt_inputs(count: int):
+def generate_image_bytes(provider: str, prompt: str) -> bytes:
     """
-    Remove old text_input keys if page count/theme changes and user regenerates prompts.
+    Return raw image bytes from the selected provider.
     """
-    for i in range(100):
-        key = f"prompt_{i}"
-        if key in st.session_state:
-            del st.session_state[key]
+
+    if provider == "Together AI":
+        if not together_client:
+            raise ValueError("TOGETHER_API_KEY is missing.")
+
+        response = together_client.images.generate(
+            prompt=prompt,
+            negative_prompt=NEGATIVE_PROMPT,
+            model=together_model,
+            width=int(image_width),
+            height=int(image_height),
+            steps=int(image_steps),
+            n=1
+        )
+        img_url = response.data[0].url
+        return requests.get(img_url, timeout=60).content
+
+    elif provider == "OpenAI":
+        if not openai_client:
+            raise ValueError("OPENAI_API_KEY is missing.")
+
+        response = openai_client.images.generate(
+            model=openai_image_model,
+            prompt=prompt,
+            size=openai_image_size,
+            quality=openai_image_quality,
+            output_format="png"
+        )
+
+        b64_img = response.data[0].b64_json
+        return base64.b64decode(b64_img)
+
+    elif provider == "Grok":
+        if not xai_client:
+            raise ValueError("XAI_API_KEY is missing.")
+
+        response = xai_client.image.sample(
+            prompt=prompt,
+            model=grok_image_model,
+        )
+
+        img_url = response.url
+        return requests.get(img_url, timeout=60).content
+
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")
 
 
 # =========================================================
@@ -196,24 +264,19 @@ col1, col2 = st.columns(2)
 with col1:
     if st.button("Generate Prompt List", use_container_width=True):
         try:
-            reset_prompt_inputs(int(page_count))
-
             with st.spinner("Creating page prompt list with OpenAI..."):
-                prompts = build_page_prompt_list(master_prompt, int(page_count))
-
-            st.session_state.page_prompts = prompts
-            st.session_state.prompt_generation_done = True
+                st.session_state.page_prompts = build_page_prompt_list(master_prompt, int(page_count))
             st.success("Prompt list created successfully.")
-
         except Exception as e:
-            st.error(f"Failed to generate prompt list with OpenAI: {e}")
-            st.session_state.prompt_generation_done = False
+            st.error(f"Failed to generate prompt list: {e}")
 
 with col2:
     if st.button("Clear Prompts", use_container_width=True):
-        reset_prompt_inputs(int(page_count))
         st.session_state.page_prompts = []
-        st.session_state.prompt_generation_done = False
+        for i in range(200):
+            key = f"prompt_{i}"
+            if key in st.session_state:
+                del st.session_state[key]
         st.success("Prompt list cleared.")
 
 # =========================================================
@@ -222,10 +285,8 @@ with col2:
 
 if st.session_state.page_prompts:
     st.subheader("Review / Edit Page Prompts")
-    st.caption("You can edit any prompt before image generation starts.")
 
     edited_prompts = []
-
     for i, prompt in enumerate(st.session_state.page_prompts):
         edited_value = st.text_input(
             f"Page {i + 1}",
@@ -236,14 +297,6 @@ if st.session_state.page_prompts:
 
     st.session_state.page_prompts = edited_prompts
 
-    bad_prompts = [
-        p for p in edited_prompts
-        if not p or "background" in p.lower() or "multiple" in p.lower()
-    ]
-
-    if bad_prompts:
-        st.warning("Some prompts may need review. Empty prompts or prompts mentioning background/multiple may give poor coloring-book results.")
-
 # =========================================================
 # Step 3: Generate Images and Build PDF
 # =========================================================
@@ -253,34 +306,20 @@ if st.session_state.page_prompts:
         final_prompts = [p.strip() for p in st.session_state.page_prompts if p.strip()]
 
         if len(final_prompts) != int(page_count):
-            st.error(f"You need exactly {int(page_count)} non-empty prompts before generating images.")
+            st.error(f"You need exactly {int(page_count)} non-empty prompts.")
             st.stop()
 
         pdf = FPDF(unit="in", format=(8.5, 11))
         progress_bar = st.progress(0)
         status_text = st.empty()
 
-        quality_wrapper = "300 dpi style"
-
         for i, page_subject in enumerate(final_prompts):
             current_page = i + 1
             status_text.text(f"Generating Page {current_page} of {page_count}: {page_subject}")
 
             try:
-                final_prompt = f"{page_subject}, {quality_wrapper}, {STYLE_SUFFIX}"
-
-                response = together_client.images.generate(
-                    prompt=final_prompt,
-                    negative_prompt=NEGATIVE_PROMPT,
-                    model=together_model,
-                    width=int(image_width),
-                    height=int(image_height),
-                    steps=int(image_steps),
-                    n=1
-                )
-
-                img_url = response.data[0].url
-                img_data = requests.get(img_url, timeout=60).content
+                final_prompt = f"{page_subject}, {STYLE_SUFFIX}"
+                img_data = generate_image_bytes(image_provider, final_prompt)
 
                 pdf.add_page()
                 pdf.image(BytesIO(img_data), x=0.5, y=0.5, w=7.5)
@@ -298,7 +337,6 @@ if st.session_state.page_prompts:
 
         try:
             pdf_bytes = bytes(pdf.output())
-
             st.download_button(
                 label="Download KDP-Ready PDF",
                 data=pdf_bytes,
