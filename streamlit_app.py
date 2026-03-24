@@ -1,60 +1,91 @@
 import streamlit as st
-from openai import OpenAI
+from together import Together
 from fpdf import FPDF
 import requests
 from io import BytesIO
-from PIL import Image
+import gc
 
-st.title("🎨 AI Children's Book Creator")
-st.subheader("Generate Childrens book - powered by AI")
+# 1. Setup Page Config
+st.set_page_config(page_title="Together AI KDP Generator", page_icon="📚")
 
-# Sidebar for API Key & Settings
-with st.sidebar:
-    api_key = st.text_input("OpenAI API Key", type="password")
-    book_title = st.text_input("Book Title", "My Coloring Book")
-    page_count = st.number_input("Number of Pages", min_value=1, max_value=50, value=5)
-    
-if not api_key:
-    st.warning("Please enter your OpenAI API Key to start.")
+st.title("📚 Together AI KDP Book Maker")
+st.markdown("Automate your coloring books for pennies per page.")
+
+# 2. Initialize Together Client using your Secret
+# Ensure TOGETHER_API_KEY is in your Streamlit Secrets
+try:
+    client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
+except Exception as e:
+    st.error("Missing TOGETHER_API_KEY in Secrets!")
     st.stop()
 
-client = OpenAI(api_key=api_key)
+# 3. Sidebar UI
+with st.sidebar:
+    st.header("Book Settings")
+    book_title = st.text_input("Book Filename", "my_together_book")
+    page_count = st.number_input("Number of Pages", min_value=1, max_value=100, value=10)
+    
+    st.divider()
+    st.subheader("Style Control")
+    master_prompt = st.text_area(
+        "Master Character/Theme", 
+        "A cute baby elephant with big ears",
+        help="This description will be added to every page for consistency."
+    )
 
-# The Logic: Generate PDF
-if st.button(f"Generate {page_count} Page Book"):
+# 4. The Generation Engine
+if st.button(f"🚀 Generate {page_count}-Page PDF"):
+    # Standard KDP 8.5x11 inches
     pdf = FPDF(unit="in", format=(8.5, 11))
     
     progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    for i in range(page_count):
-        st.write(f"Generating Page {i+1}...")
-        
-        # 1. API Call (Using DALL-E 3)
-        # Note: We use a placeholder prompt for now
-        response = client.images.generate(
-            model="dall-e-3",
-            prompt="Simple kids coloring book page, clean black lines, white background, cute animal",
-            size="1024x1024",
-            quality="standard",
-            n=1,
-        )
-        
-        img_url = response.data[0].url
-        img_data = requests.get(img_url).content
-        
-        # 2. Add to PDF
-        pdf.add_page()
-        # We use BytesIO to avoid saving files to the cloud disk
-        pdf.image(BytesIO(img_data), x=0.5, y=0.5, w=7.5)
-        
-        progress_bar.progress((i + 1) / page_count)
+    # KDP-Specific Quality Prompt Wrapper
+    quality_wrapper = "coloring book page, clean black and white line art, bold outlines, white background, no shading, no grey, high contrast, 300 dpi style"
 
-    # 3. Final Export
-    pdf_output = pdf.output() # Returns bytes in fpdf2
-    st.success("Book Generated!")
+    for i in range(page_count):
+        current_page = i + 1
+        status_text.text(f"🎨 Generating Page {current_page} of {page_count}...")
+        
+        try:
+            # Together AI API Call (SDXL 1.0 is the best 'cheap' model for lines)
+            response = client.images.generate(
+                prompt=f"{master_prompt}, {quality_wrapper}",
+                model="stabilityai/stable-diffusion-xl-base-1.0",
+                width=1024,
+                height=1024,
+                steps=40,
+                n=1
+            )
+            
+            img_url = response.data[0].url
+            img_data = requests.get(img_url).content
+            
+            # Add to PDF: Center image with 0.5" margins
+            pdf.add_page()
+            # FPDF2 allows passing BytesIO directly
+            pdf.image(BytesIO(img_data), x=0.5, y=0.5, w=7.5)
+            
+            # MEMORY MANAGEMENT: Clear image data from RAM immediately
+            del img_data
+            gc.collect()
+            
+        except Exception as e:
+            st.error(f"Error on page {current_page}: {str(e)}")
+            break
+            
+        progress_bar.progress(current_page / page_count)
+
+    # 5. Finalize and Download
+    status_text.text("✅ Book Assembly Complete!")
+    
+    # Convert PDF to bytes for the download button
+    pdf_bytes = pdf.output() 
+    
     st.download_button(
-        label="Download KDP PDF",
-        data=pdf_output,
-        file_name=f"{book_title}.pdf",
+        label="📥 Download KDP-Ready PDF",
+        data=pdf_bytes,
+        file_name=f"{book_title.replace(' ', '_')}.pdf",
         mime="application/pdf"
     )
